@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Taoyuan Garbage Truck Tracker</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            background: #121212; 
+            color: #ffffff; 
+            margin: 0; 
+            padding: 15px; 
+            text-align: center;
+        }
+        h1 { 
+            font-size: 1.5em; 
+            color: #4caf50; 
+            margin-bottom: 5px;
+        }
+        p {
+            color: #aaaaaa;
+            font-size: 0.9em;
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+        #map { 
+            width: 100%; 
+            height: 70vh; 
+            border-radius: 15px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        .info-box {
+            background: #1e1e1e;
+            padding: 10px;
+            margin-top: 15px;
+            border-radius: 8px;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Відстеження сміттєвозів Таоюань</h1>
+    <p>Тицьни пальцем у будь-яку точку на карті (наприклад, свій дім), щоб знайти машини поруч</p>
+    
+    <div id="map"></div>
+    
+    <div class="info-box" id="status-box">
+        Статус: Карта готова. Очікування вибору точки...
+    </div>
+
+    <script>
+        // 1. Ініціалізуємо карту округу Таоюань (Пінчжень / Чунлі) з правильними координатами
+        const map = L.map('map').setView([24.9419, 121.2185], 13); 
+
+        // Завантажуємо безкоштовні шари карти OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        let homeMarker = null;
+        let truckMarkers = [];
+
+        // 2. Функція, яка спрацьовує при кліку/тапу по карті
+        map.on('click', function(e) {
+            const clickedLat = e.latlng.lat;
+            const clickedLng = e.latlng.lng;
+
+            document.getElementById('status-box').innerText = `Обрано координати: ${clickedLat.toFixed(4)}, ${clickedLng.toFixed(4)}. Шукаємо машини...`;
+
+            // Ставимо або переміщуємо маркер "Мій дім" (синій)
+            if (homeMarker) {
+                homeMarker.setLatLng(e.latlng);
+            } else {
+                homeMarker = L.marker(e.latlng).addTo(map).bindPopup("<b>Мій дім</b>").openPopup();
+            }
