@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Чистий Гіроскоп (Ізольована Вісь)</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0d0f12;
+            color: #ffffff;
+            font-family: system-ui, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .container {
+            text-align: center;
+            width: 90%;
+            max-width: 450px;
+        }
+        .direction {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #666;
+            text-transform: uppercase;
+        }
+        .angle-display {
+            font-size: 7rem;
+            font-weight: 900;
+            margin: 10px 0;
+            font-variant-numeric: tabular-nums;
+        }
+        .gauge-container {
+            width: 100%;
+            height: 12px;
+            background-color: #1e232b;
+            border-radius: 6px;
+            margin: 30px 0;
+            position: relative;
+        }
+        .center-line {
+            position: absolute;
+            width: 4px;
+            height: 22px;
+            background-color: #ff3b30;
+            left: 50%;
+            top: -5px;
+            transform: translateX(-50%);
+            border-radius: 2px;
+        }
+        .gauge-pointer {
+            width: 22px;
+            height: 22px;
+            background-color: #00ff66;
+            border-radius: 50%;
+            position: absolute;
+            top: -5px;
+            left: 50%;
+            transform: translateX(-50%);
+            box-shadow: 0 0 15px #00ff66;
+        }
+        .btn {
+            background-color: #007aff;
+            color: white;
+            border: none;
+            padding: 18px 45px;
+            font-size: 1.3rem;
+            border-radius: 35px;
+            cursor: pointer;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .btn:active {
+            transform: scale(0.96);
+        }
+        .status {
+            font-size: 0.95rem;
+            color: #555;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="status" style="color:#aaa; margin-bottom:10px;">Кріплення: ВЕРТИКАЛЬНО (портретний режим)</div>
+    <div class="direction" id="direction">Натисніть кнопку</div>
+    <div class="angle-display" id="angle">0.0°</div>
+    
+    <div class="gauge-container">
+        <div class="center-line"></div>
+        <div class="gauge-pointer" id="pointer"></div>
+    </div>
+
+    <button class="btn" id="startBtn">Пошук Нуля</button>
+    <div class="status" id="status">Постав скутер рівно та натисни для скидання кута</div>
+</div>
+
+<script>
+    let currentAngle = 0;
+    let lastTimestamp = 0;
+    let isRunning = false;
+
+    const angleDisplay = document.getElementById('angle');
+    const directionDisplay = document.getElementById('direction');
+    const pointer = document.getElementById('pointer');
+    const startBtn = document.getElementById('startBtn');
+    const statusDisplay = document.getElementById('status');
+
+    function handleMotion(event) {
+        if (!event.rotationRate) return;
+
+        // Зчитуємо швидкість обертання навколо вертикальної осі смартфона
+        let rotationY = event.rotationRate.gamma; 
+
+        if (rotationY === null) return;
+
+        // Розраховуємо час між кадрами
+        const now = performance.now();
+        if (lastTimestamp === 0) {
+            lastTimestamp = now;
+            return;
+        }
+        const dt = (now - lastTimestamp) / 1000;
+        lastTimestamp = now;
+
+        // Фільтр мікротремтіння
+        if (Math.abs(rotationY) < 0.5) rotationY = 0;
+
+        // Знак мінуса (-rotationY) інвертує напрямок під твій телефон
+        currentAngle += (-rotationY) * dt;
+
+        // Обмеження максимального кута
+        if (currentAngle > 90) currentAngle = 90;
+        if (currentAngle < -90) currentAngle = -90;
+
+        updateUI();
+    }
+
+    function updateUI() {
+        let finalAngle = parseFloat(currentAngle.toFixed(1));
+        let absAngle = Math.abs(finalAngle);
+
+        angleDisplay.innerText = `${absAngle.toFixed(1)}°`;
+
+        if (finalAngle > 0.5) {
+            directionDisplay.innerText = "Нахил Вправо ➔";
+            directionDisplay.style.color = "#00ff66";
+        } else if (finalAngle < -0.5) {
+            directionDisplay.innerText = "➦ Нахил Вліво";
+            directionDisplay.style.color = "#ff3b30";
+        } else {
+            directionDisplay.innerText = "ЦЕНТР";
+            directionDisplay.style.color = "#555";
+            angleDisplay.innerText = "0.0°";
+        }
+
+        // Візуалізація на шкалі (макс кут шкали 45 градусів)
+        let maxGaugeAngle = 45;
+        let percent = 50 + (finalAngle / maxGaugeAngle) * 50;
+        percent = Math.max(0, Math.min(100, percent));
+        pointer.style.left = `${percent}%`;
+    }
+
+    startBtn.addEventListener('click', () => {
+        // Миттєве скидання кута в 0 при кожному натисканні
+        currentAngle = 0;
+        lastTimestamp = performance.now();
+        statusDisplay.innerText = "Кут обнулено! Датчик активовано.";
+        statusDisplay.style.color = "#00ff66";
+
+        if (!isRunning) {
+            if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                DeviceMotionEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            window.addEventListener('devicemotion', handleMotion);
+                            isRunning = true;
+                        } else {
+                            statusDisplay.innerText = "Помилка: доступ до гіроскопа відхилено.";
+                        }
+                    })
+                    .catch(console.error);
+            } else {
+                window.addEventListener('devicemotion', handleMotion);
+                isRunning = true;
+            }
+        }
+    });
+</script>
+
+</body>
+</html>
