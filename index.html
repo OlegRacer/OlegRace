@@ -1,0 +1,88 @@
+<script>
+    let currentAngle = 0;
+    let speedMPS = 0;
+    let isLandscape = false;
+
+    const angleElement = document.getElementById('angle');
+    const speedElement = document.getElementById('speed');
+    const directionElement = document.getElementById('direction');
+    const orientationBadge = document.getElementById('orientationMode');
+    const startBtn = document.getElementById('startBtn');
+
+    function checkOrientation() {
+        if (screen.orientation && screen.orientation.type) {
+            isLandscape = screen.orientation.type.includes('landscape');
+        } else {
+            isLandscape = Math.abs(window.orientation) === 90;
+        }
+
+        if (isLandscape) {
+            orientationBadge.innerText = "Режим: Горизонтальний (Альбомний)";
+        } else {
+            orientationBadge.innerText = "Режим: Вертикальний (Портретний)";
+        }
+    }
+
+    window.addEventListener('resize', checkOrientation);
+    window.addEventListener('orientationchange', checkOrientation);
+    checkOrientation();
+
+    if (navigator.geolocation) {
+        navigator.geolocation.watchPosition((position) => {
+            if (position.coords.speed !== null) {
+                speedMPS = position.coords.speed;
+                speedElement.innerText = Math.round(speedMPS * 3.6);
+            }
+        }, (error) => console.log(error), { enableHighAccuracy: true });
+    }
+
+    startBtn.addEventListener('click', async () => {
+        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+            try {
+                const permissionState = await DeviceOrientationEvent.requestPermission();
+                if (permissionState === 'granted') {
+                    window.addEventListener('deviceorientation', handleOrientation);
+                    startBtn.style.display = 'none';
+                }
+            } catch (error) {
+                alert('Доступ відхилено: ' + error);
+            }
+        } else {
+            window.addEventListener('deviceorientation', handleOrientation);
+            startBtn.style.display = 'none';
+        }
+    });
+
+    function handleOrientation(event) {
+        let targetRoll = 0;
+
+        if (isLandscape) {
+            let orientationAngle = window.orientation || (screen.orientation && screen.orientation.angle) || 0;
+            
+            /* Повна залізна інверсія знаку для альбомного режиму */
+            if (orientationAngle < 0) {
+                targetRoll = event.beta; 
+            } else {
+                targetRoll = -event.beta;
+            }
+        } else {
+            targetRoll = event.gamma;
+        }
+
+        currentAngle = (0.85 * currentAngle) + (0.15 * targetRoll);
+        let displayAngle = Math.round(currentAngle);
+
+        angleElement.innerText = Math.abs(displayAngle);
+
+        if (displayAngle > 3) {
+            directionElement.innerText = "Нахил праворуч 👉";
+            directionElement.style.color = "#ff5722";
+        } else if (displayAngle < -3) {
+            directionElement.innerText = "👈 Нахил ліворуч";
+            directionElement.style.color = "#ff5722";
+        } else {
+            directionElement.innerText = "Рівно 🏍️";
+            directionElement.style.color = "#00ffcc";
+        }
+    }
+</script>
