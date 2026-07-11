@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>OlegRace Дашборд</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    :root {
+      --bg-color: #0c0f12;
+      --card-bg: #161b22;
+      --text-main: #f0f6fc;
+      --text-mut: #8b949e;
+      --accent: #58a6ff;
+      --warn: #d29922;
+      --crit: #f85149;
+      --safe: #3fb950;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      background: var(--bg-color);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 10px;
+    }
+    
+    /* СІТКА ТАЙЛІВ FIXED ДЛЯ ЗАХИСТУ ВІД СКРОЛУ BLUEFY */
+    #grid {
+      position: fixed;
+      top: 10px; left: 10px; right: 10px; bottom: 80px;
+      display: grid;
+      gap: 12px;
+    }
+    
+    .tile {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      border: 1px solid #30363d;
+      transition: transform 0.1s, border-color 0.2s;
+    }
+    .tile:active { transform: scale(0.98); }
+    .tile.edit-mode { border: 2px dashed var(--accent); }
+    .tile.alarm-active {
+      animation: blink-crit 0.6s infinite alternate;
+      border-color: var(--crit);
+    }
+    @keyframes blink-crit {
+      0% { box-shadow: inset 0 0 15px rgba(248,81,73,0.2); }
+      100% { box-shadow: inset 0 0 25px rgba(248,81,73,0.7); }
+    }
+    
+    .tile-head {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-mut);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .tile-body {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      flex-grow: 1;
+      padding: 4px 0;
+    }
+    .tile-val {
+      font-size: clamp(32px, 8vw, 64px);
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+    .tile-unit {
+      font-size: 16px;
+      color: var(--text-mut);
+      margin-left: 4px;
+      font-weight: 500;
+    }
+    
+    /* ІНДИКАТОР РАДАРУ КАМЕР У GPS ТАЙЛІ */
+    #cam-radar {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      display: none; /* вмикається з JS */
+      align-items: center;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 4px 8px;
+      border-radius: 20px;
+      border: 1px solid #444;
+      z-index: 10;
+    }
+    #cam-radar .cam-sign {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: white;
+      border: 3px solid #ff3b30;
+      color: black;
+      font-weight: 900;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 6px;
+    }
+    #cam-radar .cam-dist {
+      font-size: 16px;
+      font-weight: 800;
+      color: #fff;
+    }
+    #cam-radar.near .cam-dist {
+      color: #ff3b30;
+      animation: pulse-text 0.5s infinite alternate;
+    }
+    @keyframes pulse-text {
+      0% { opacity: 0.6; }
+      100% { opacity: 1; }
+    }
+
+    /* НИЖНЯ ПАНЕЛЬ */
+    #bar {
+      position: fixed;
+      bottom: 10px; left: 10px; right: 10px;
+      height: 60px;
+      display: flex;
+      gap: 10px;
+      z-index: 100;
+    }
+    .btn {
+      flex: 1;
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 14px;
+      color: var(--text-main);
+      font-size: 15px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .btn:active { background: #30363d; }
+    #btn-conn { background: #238636; border-color: #2ea44f; color: #fff; }
+    #btn-conn.connected { background: var(--crit); border-color: #da3633; }
+    #btn-conn.connecting { background: var(--warn); border-color: #b7811d; }
+    #btn-settings { max-width: 60px; font-size: 20px; }
+    
+    /* МОДАЛКА НАЛАШТУВАНЬ */
+    #overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.8);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: none;
+      z-index: 200;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    .modal {
+      background: var(--card-bg);
+      border: 1px solid #30363d;
+      border-radius: 20px;
+      max-width: 500px;
+      margin: 20px auto;
+      padding: 20px;
+    }
+    .modal-h {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      border-bottom: 1px solid #30363d;
+      padding-bottom: 10px;
+    }
+    .sec-t { margin: 15px 0 10px; font-size: 14px; color: var(--accent); text-transform: uppercase; }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid #21262d;
+    }
+    .row label { font-size: 15px; }
+    .row input[type="number"], .row input[type="text"], .row select {
+      background: #0c0f12;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #fff;
+      padding: 6px;
+      width: 80px;
+      text-align: center;
+    }
+    .ws-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+    .chip {
+      background: #21262d; border: 1px solid #30363d; padding: 6px 12px;
+      border-radius: 20px; font-size: 13px; cursor: pointer; color: var(--text-mut);
+    }
+    .chip.active { background: var(--accent); color: #000; font-weight: 600; border-color: var(--accent); }
+    .toast {
+      position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.9); border: 1px solid var(--accent);
+      padding: 12px 24px; border-radius: 30px; z-index: 300; display: none;
+      font-weight: 600; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    #pip-video { position: fixed; width: 10px; height: 10px; opacity: 0.01; pointer-events: none; }
+  </style>
+</head>
+<body>
+
+  <div id="grid"></div>
+
+  <div id="bar">
+    <button id="btn-conn" onclick="onConnectClick()">CONNECT</button>
+    <button id="btn-settings" onclick="openSettings()">⚙️</button>
+  </div>
+
+  <div id="overlay">
+    <div class="modal">
+      <div class="modal-h">
+        <h3>Налаштування</h3>
+        <button class="btn" style="max-width:60px; height:35px;" onclick="closeSettings()">ОК</button>
+      </div>
+      
+      <div class="sec-t">Екран та Столи</div>
+      <div class="ws-chips" id="ws-container"></div>
+      <div style="display:flex; gap:8px; margin-bottom:15px;">
+        <button class="btn" style="height:35px; font-size:13px;" onclick="wsAdd()">➕ Новий</button>
+        <button class="btn" style="height:35px; font-size:13px;" onclick="wsRename()">✏️ Назва</button>
+        <button class="btn" style="height:35px; font-size:13px; background:#3c1e1e;" id="btn-ws-del" onclick="wsDel()">🗑 Видалити</button>
+      </div>
+      <div class="row">
+        <label>Режим редагування плиток</label>
+        <input type="checkbox" id="chk-edit" onchange="toggleEditMode(this.checked)">
+      </div>
+      
+      <div class="sec-t">Калібрування TPS</div>
+      <div class="row">
+        <span>Мін (закритий): <b id="lbl-tps-min">0</b></span>
+        <button class="btn" style="max-width:100px; height:30px; font-size:12px;" onclick="calTpsMin()">Записати</button>
+      </div>
+      <div class="row">
+        <span>Макс (відкритий): <b id="lbl-tps-max">170</b></span>
+        <button class="btn" style="max-width:100px; height:30px; font-size:12px;" onclick="calTpsMax()">Записати</button>
+      </div>
+
+      <div class="sec-t">Сигнали тривоги</div>
+      <div class="row">
+        <label>Макс T_Eng (°C)</label>
+        <input type="number" id="inp-al-teng" onchange="saveAlarms()">
+      </div>
+      <div class="row">
+        <label>Мін Вольти (V)</label>
+        <input type="number" step="0.1" id="inp-al-volt" onchange="saveAlarms()">
+      </div>
+      <div class="row">
+        <label>Детекція падіння (Тест)</label>
+        <input type="checkbox" id="chk-al-fall" onchange="saveAlarms()">
+      </div>
+      
+      <div class="sec-t">Скидання системи</div>
+      <button class="btn" style="background:#3c1e1e; height:40px; width:100%; margin-top:5px;" onclick="resetAll()">Скинути всі налаштування</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <video id="pip-video" autoplay loop muted playsinline></video>
+
+<script>
+// --- БАЗА ДАНИХ КАМЕР ТАОЮАНЬ (Швидкість <= 60) ---
+const CAMERAS_DB = [
+  { lat: 24.941624, lon: 121.213271, limit: 50, loc: "平鎮區延平路三段" },
+  { lat: 24.912644, lon: 121.198322, limit: 60, loc: "平鎮區陸軍路" },
+  { lat: 24.954751, lon: 121.205241, limit: 50, loc: "平鎮區育達路" },
+  { lat: 24.928812, lon: 121.226311, limit: 50, loc: "平鎮區金陵路四段" },
+  { lat: 24.948211, lon: 121.238411, limit: 60, loc: "中壢區中龍路" },
+  { lat: 24.894122, lon: 121.211155, limit: 50, loc: "龍潭區中豐路" }
+];
+
+// Глобальні змінні стану радара
+let activeCamera = null;
+let said200 = false;
+let said100 = false;
+
+// Функція голосового виклику (чистий голос без UI блокування)
+function speak(text) {
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel(); // перериваємо старе, якщо запізнилось
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'uk-UA'; // Спробує українською, якщо є в системі
+    utterance.rate = 1.2;
+    window.speechSynthesis.speak(utterance);
+  }
+}
+
+// ГЛОБАЛЬНИЙ СТАН ТЕЛЕМЕТРІЇ (V) ТА НАЛАШТУВАНЬ
+const V = {
+  RPM: 0, Volt: 0, T_Eng: 0, MAP: 0, T_Air: 0, TPS: 0,
+  Speed: 0, Alt: 0, Gforce: 1.0, Lean: 0, Inj_Rate: 0.0
+};
+
+// Конфігурація параметрів (Метадані)
+const P = {
+  RPM:      { name: "Оберти",  unit: "rpm", src: "ecu" },
+  Volt:     { name: "Вольтаж", unit: "V",   src: "ecu" },
+  T_Eng:    { name: "Т двигуна",unit: "°C",  src: "ecu" },
+  MAP:      { name: "Тиск MAP",unit: "psi",src: "ecu" },
+  T_Air:    { name: "Т повітря",unit: "°C",  src: "ecu" },
+  TPS:      { name: "Дросель", unit: "%",   src: "ecu" },
+  Speed:    { name: "Швидкість",unit: "км/г",src: "gps" },
+  Alt:      { name: "GPS H",   unit: "м",   src: "gps" },
+  Gforce:   { name: "G-Сила",  unit: "G",   src: "sensor" },
+  Lean:     { name: "Кут нахилу",unit: "°",  src: "sensor" },
+  Inj_Rate: { name: "Inj Rate",unit: "ms",  src: "ecu" }
+};
+
+let workspaces = [];
+let activeWsId = "";
+let AL = { T_Eng: 105, Volt: 11.5, Fall_enabled: true };
+let TC = { min: 0, max: 170 };
+
+// Змінні комплементарного фільтра кута нахилу
+let motionCal = null;
+let motionSideAxis = null;
+let currentLeanFiltered = 0;
+let lastGData = { x: 0, y: 0, z: 0 };
+let lastGyroGamma = 0;
+let lastMotionTime = 0;
+const FILTER_TAU_S = 1.5;
+
+// BLE та таймери перепідключення
+const SERVICE_UUID = "0000ffe0-0000-1000-8000-00805f9b34fb";
+const CHAR_UUID    = "0000ffe1-0000-1000-8000-00805f9b34fb";
+let bDev = null;
+let bChar = null;
+let bConn = false;
+let isConnecting = false;
+let reconnectTimer = null;
+let clickTimer = null;
+
+// Детекція падіння
+let fallConfirmTimer = null;
+let isFallConfirmed = false;
+const FALL_CONFIRM_WINDOW_MS = 2500;
+const FALL_CONFIRM_LEAN_DEG = 45;
+
+// Ініціалізація при завантаженні
+window.addEventListener('DOMContentLoaded', () => {
+  lg("Запуск додатка. Завантаження налаштувань...");
+  loadSettings();
+  setupBleUI();
+  initSensorAccess();
+  renderGrid();
+  startGPS();
+  setupPiP();
+  
+  setInterval(updateUI, 100);
+  setInterval(checkAlarms, 500);
+});
+
+function lg(m) { console.log(`[Racer] ${m}`); }
+function ls(k, v) { localStorage.setItem(k, JSON.stringify(v)); }
+
+function loadSettings() {
+  try {
+    const rawWs = localStorage.getItem("ar_workspaces");
+    if (rawWs) {
+      workspaces = JSON.parse(rawWs);
+    } else {
+      workspaces = [
+        { id: "ws1", name: "Стіл 1", lay: ["RPM", "TPS", "T_Eng", "Volt", "Speed", "Alt"] },
+        { id: "ws2", name: "Стіл 2", lay: ["RPM", "Inj_Rate", "Lean", "Gforce"] }
+      ];
+      ls("ar_workspaces", workspaces);
+    }
+    
+    activeWsId = localStorage.getItem("ar_activeWs") || workspaces[0].id;
+    if (!workspaces.find(w => w.id === activeWsId)) activeWsId = workspaces[0].id;
+    
+    const rawAl = localStorage.getItem("ar_al");
+    if (rawAl) AL = JSON.parse(rawAl);
+    if (AL.Fall_enabled === undefined) AL.Fall_enabled = true;
+    
+    const rawTc = localStorage.getItem("ar_tpscal");
+    if (rawTc) TC = JSON.parse(rawTc);
+    
+    motionCal = JSON.parse(localStorage.getItem("ar_motioncal")) || null;
+    motionSideAxis = JSON.parse(localStorage.getItem("ar_motionside")) || null;
+    
+    document.getElementById("inp-al-teng").value = AL.T_Eng;
+    document.getElementById("inp-al-volt").value = AL.Volt;
+    document.getElementById("chk-al-fall").checked = AL.Fall_enabled;
+    document.getElementById("lbl-tps-min").innerText = TC.min;
+    document.getElementById("lbl-tps-max").innerText = TC.max;
+  } catch(e) {
+    lg("Помилка парсингу localStorage, скидаємо...");
+    resetAll();
+  }
+}
+
+function saveAlarms() {
+  AL.T_Eng = parseFloat(document.getElementById("inp-al-teng").value) || 105;
+  AL.Volt = parseFloat(document.getElementById("inp-al-volt").value) || 11.5;
+  AL.Fall_enabled = document.getElementById("chk-al-fall").checked;
+  ls("ar_al", AL);
+}
+
+function resetAll() {
+  lg("Повне очищення налаштувань!");
+  localStorage.clear();
+  window.location.reload();
+}
+
+// РОБОЧІ СТОЛИ & СІТКА
+function getActiveWs() { return workspaces.find(w => w.id === activeWsId); }
+
+function renderGrid() {
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  const ws = getActiveWs();
+  if (!ws) return;
+  
+  applyGridColumns(ws.lay.length);
+  const isEdit = document.getElementById("chk-edit").checked;
+  
+  ws.lay.forEach((key, idx) => {
+    const meta = P[key];
+    if (!meta) return;
+    
+    const tile = document.createElement("div");
+    tile.className = `tile ${isEdit ? 'edit-mode' : ''}`;
+    tile.setAttribute("data-key", key);
+    
+    // Якщо це тайл GPS H (Alt), вшиваємо всередину контейнер радара камер
+    let radarHtml = "";
+    if (key === "Alt") {
+      radarHtml = `
+        <div id="cam-radar">
+          <div class="cam-sign" id="cam-limit">50</div>
+          <div class="cam-dist" id="cam-dist-val">200м</div>
+        </div>
+      `;
+    }
+    
+    tile.innerHTML = `
+      <div class="tile-head">
+        <span>${meta.name}</span>
+        ${isEdit ? `<span style="color:var(--accent); font-size:10px;">✕</span>` : ''}
+      </div>
+      <div class="tile-body">
+        <span class="tile-val" id="v-${key}">--</span>
+        <span class="tile-unit">${meta.unit}</span>
+      </div>
+      ${radarHtml}
+    `;
+    
+    if (isEdit) {
+      tile.onclick = (e) => {
+        e.stopPropagation();
+        tileDelete(idx);
+      };
+    } else {
+      if (key === "Lean") {
+        tile.onclick = () => onLeanTileClick();
+      }
+    }
+    grid.appendChild(tile);
+  });
+}
+
+function applyGridColumns(count) {
+  const grid = document.getElementById("grid");
+  if (count <= 2) grid.style.gridTemplateColumns = "1fr";
+  else if (count <= 4) grid.style.gridTemplateColumns = "1fr 1fr";
+  else grid.style.gridTemplateColumns = "1fr 1fr";
+}
+
+function toggleEditMode(val) {
+  renderGrid();
+}
+
+function tileDelete(idx) {
+  const ws = getActiveWs();
+  if (!ws) return;
+  ws.lay.splice(idx, 1);
+  ls("ar_workspaces", workspaces);
+  renderGrid();
+}
+
+function showToast(txt, dur=2500) {
+  const t = document.getElementById("toast");
+  t.innerText = txt;
+  t.style.display = "block";
+  setTimeout(() => { t.style.display = "none"; }, dur);
+}
+
+// НАЛАШТУВАННЯ UI
+function openSettings() {
+  document.getElementById("overlay").style.display = "block";
+  renderWsChips();
+}
+function closeSettings() {
+  document.getElementById("overlay").style.display = "none";
+}
+
+function renderWsChips() {
+  const container = document.getElementById("ws-container");
+  container.innerHTML = "";
+  workspaces.forEach(w => {
+    const chip = document.createElement("div");
+    chip.className = `chip ${w.id === activeWsId ? 'active' : ''}`;
+    chip.innerText = w.name;
+    chip.onclick = () => {
+      activeWsId = w.id;
+      ls("ar_activeWs", activeWsId);
+      renderWsChips();
+      renderGrid();
+    };
+    container.appendChild(chip);
+  });
+  document.getElementById("btn-ws-del").style.display = workspaces.length > 1 ? "block" : "none";
+}
+
+function wsAdd() {
+  const name = prompt("Назва нового столу:", `Стіл ${workspaces.length + 1}`);
+  if (!name) return;
+  const id = "ws_" + Date.now();
+  workspaces.push({ id, name, lay: ["RPM", "Volt"] });
+  activeWsId = id;
+  ls("ar_workspaces", workspaces);
+  ls("ar_activeWs", activeWsId);
+  renderWsChips();
+  renderGrid();
+}
+
+function wsRename() {
+  const ws = getActiveWs();
+  if (!ws) return;
+  const name = prompt("Нова назва:", ws.name);
+  if (!name) return;
+  ws.name = name;
+  ls("ar_workspaces", workspaces);
+  renderWsChips();
+}
+
+function wsDel() {
+  if (workspaces.length <= 1) return;
+  if (!confirm("Видалити поточний робочий стіл?")) return;
+  const idx = workspaces.findIndex(w => w.id === activeWsId);
+  workspaces.splice(idx, 1);
+  activeWsId = workspaces[0].id;
+  ls("ar_workspaces", workspaces);
+  ls("ar_activeWs", activeWsId);
+  renderWsChips();
+  renderGrid();
+}
+
+function calTpsMin() {
+  TC.min = window.lastRawTps || 0;
+  ls("ar_tpscal", TC);
+  document.getElementById("lbl-tps-min").innerText = TC.min;
+  showToast(`Мін TPS збережено: ${TC.min}`);
+}
+function calTpsMax() {
+  TC.max = window.lastRawTps || 170;
+  ls("ar_tpscal", TC);
+  document.getElementById("lbl-tps-max").innerText = TC.max;
+  showToast(`Макс TPS збережено: ${TC.max}`);
+}
+
+// КЕРУВАННЯ СЕНСОРАМИ ТЕЛЕФОНУ
+function initSensorAccess() {
+  if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+    lg("iOS пристрій: потрібен запит дозволу на датчики руху");
+  } else {
+    window.addEventListener('devicemotion', onDeviceMotion, true);
+  }
+}
+
+function onLeanTileClick() {
+  if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+    DeviceMotionEvent.requestPermission()
+      .then(res => {
+        if (res === 'granted') {
+          window.addEventListener('devicemotion', onDeviceMotion, true);
+          executeTwoStepCal();
+        } else {
+          showToast("Доступ до датчиків відхилено");
+        }
+      })
+      .catch(e => showToast("Помилка датчиків: " + e));
+  } else {
+    executeTwoStepCal();
+  }
+}
+
+function executeTwoStepCal() {
+  showToast("Крок 1: Тримайте байк рівно вертикально...", 1500);
+  setTimeout(() => {
+    motionCal = { x: lastGData.x, y: lastGData.y, z: lastGData.z };
+    localStorage.setItem("ar_motioncal", JSON.stringify(motionCal));
+    
+    showToast("Крок 2: Нахиліть вліво на 15-30° і тримайте...", 2500);
+    setTimeout(() => {
+      motionSideAxis = { x: lastGData.x, y: lastGData.y, z: lastGData.z };
+      localStorage.setItem("ar_motionside", JSON.stringify(motionSideAxis));
+      showToast("Калібрування нахилу ЗАВЕРШЕНО!", 2000);
+    }, 1500);
+  }, 1500);
+}
+
+function onDeviceMotion(e) {
+  const accG = e.accelerationIncludingGravity;
+  const gyro = e.rotationRate;
+  if (!accG) return;
+  
+  lastGData = { x: accG.x, y: accG.y, z: accG.z };
+  if (gyro && gyro.gamma !== null) {
+    lastGyroGamma = gyro.gamma;
+  }
+  
+  const rawG = Math.sqrt(accG.x*accG.x + accG.y*accG.y + accG.z*accG.z);
+  V.Gforce = rawG / 9.80665;
+  
+  handleGSpikeTrigger(V.Gforce);
+  
+  if (!motionCal || !motionSideAxis) {
+    V.Lean = 0;
+    return;
+  }
+  
+  const now = performance.now();
+  let dt = (lastMotionTime > 0) ? (now - lastMotionTime) / 1000 : 0.01;
+  lastMotionTime = now;
+  if (dt > 0.2) dt = 0.01;
+  
+  const u = motionCal;
+  const s = motionSideAxis;
+  
+  const projUp = accG.x*u.x + accG.y*u.y + accG.z*u.z;
+  const projSide = accG.x*s.x + accG.y*s.y + accG.z*s.z;
+  
+  const accLeanDeg = Math.atan2(projSide, projUp) * (180 / Math.PI);
+  
+  const gyroRate = lastGyroGamma;
+  const predictedLean = currentLeanFiltered + gyroRate * dt;
+  
+  const alpha = FILTER_TAU_S / (FILTER_TAU_S + dt);
+  currentLeanFiltered = alpha * predictedLean + (1 - alpha) * accLeanDeg;
+  
+  let leanFinal = currentLeanFiltered;
+  if (leanFinal > 180) leanFinal -= 360;
+  if (leanFinal < -180) leanFinal += 360;
+  
+  V.Lean = Math.round(leanFinal);
+  handleTipoverTrigger(V.Lean);
+}
+
+// ДЕТЕКЦІЯ ПАДІННЯ (СПОСТЕРЕЖЕННЯ)
+function handleTipoverTrigger(leanVal) {
+  if (!AL.Fall_enabled) return;
+  if (Math.abs(leanVal) > 80) {
+    if (!window.tipoverStart) {
+      window.tipoverStart = performance.now();
+    } else if (performance.now() - window.tipoverStart > 3000) {
+      if (!isFallConfirmed) triggerFallDetected("Tipover >80° понад 3с");
+    }
+  } else {
+    window.tipoverStart = null;
+  }
+}
+
+function handleGSpikeTrigger(gForce) {
+  if (!AL.Fall_enabled) return;
+  if (gForce > 2.2) {
+    if (fallConfirmTimer) clearTimeout(fallConfirmTimer);
+    window.gSpikeCandidateTime = performance.now();
+    
+    fallConfirmTimer = setTimeout(() => {
+      const currentLean = Math.abs(V.Lean);
+      if (currentLean > FALL_CONFIRM_LEAN_DEG) {
+        triggerFallDetected(`Удар ${gForce.toFixed(2)}G + Нахил ${currentLean}°`);
+      }
+      fallConfirmTimer = null;
+    }, FALL_CONFIRM_WINDOW_MS);
+  }
+}
+
+function triggerFallDetected(reason) {
+  isFallConfirmed = true;
+  lg(`🔥 ТРИГЕР ПАДІННЯ: ${reason}`);
+  showToast(`⚠️ ДЕТЕКТОВАНО ПАДІННЯ!\n(${reason})`, 5000);
+  setTimeout(() => { isFallConfirmed = false; }, 8000);
+}
+
+// GPS ТА ФОРМУЛА ГАВЕРСИНУСА ДЛЯ РАДАРА КАМЕР
+function startGPS() {
+  if ("geolocation" in navigator) {
+    navigator.geolocation.watchPosition(
+      (pos) => {
+        const c = pos.coords;
+        V.Speed = Math.round((c.speed < 0 || c.speed === null) ? 0 : c.speed * 3.6);
+        V.Alt = Math.round(c.altitude || 0);
+        
+        // РАДАР КАМЕР: Логіка щосекундного аналізу координат
+        const lat1 = c.latitude;
+        const lon1 = c.longitude;
+        let closestCam = null;
+        let minDist = Infinity;
+        
+        for (const cam of CAMERAS_DB) {
+          // Швидка груба гео-фільтрація (~1 км)
+          if (Math.abs(cam.lat - lat1) > 0.01 || Math.abs(cam.lon - lon1) > 0.01) continue;
+          
+          // Точний розрахунок відстані (Гаверсинус)
+          const R = 6371000; // радіус Землі в метрах
+          const dLat = (cam.lat - lat1) * Math.PI / 180;
+          const dLon = (cam.lon - lon1) * Math.PI / 180;
+          const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(lat1 * Math.PI / 180) * Math.cos(cam.lat * Math.PI / 180) *
+                    Math.sin(dLon/2) * Math.sin(dLon/2);
+          const dist = 2 * R * Math.asin(Math.sqrt(a));
+          
+          if (dist < minDist) {
+            minDist = dist;
+            closestCam = cam;
+          }
+        }
+        
+        const radarUi = document.getElementById("cam-radar");
+        const limitUi = document.getElementById("cam-limit");
+        const distUi = document.getElementById("cam-dist-val");
+        
+        if (closestCam && minDist <= 220) {
+          const roundedDist = Math.round(minDist);
+          
+          // Відображаємо UI
+          if (radarUi) {
+            radarUi.style.display = "flex";
+            if (limitUi) limitUi.innerText = closestCam.limit;
+            if (distUi) distUi.innerText = `${roundedDist}м`;
+            
+            if (roundedDist <= 100) {
+              radarUi.classList.add("near");
+            } else {
+              radarUi.classList.remove("near");
+            }
+          }
+          
+          // ГОЛОСОВІ ПОВІДОМЛЕННЯ (200 та 100 метрів)
+          if (roundedDist <= 200 && roundedDist > 150 && !said200) {
+            speak("Камера 200");
+            said200 = true;
+          }
+          if (roundedDist <= 100 && roundedDist > 50 && !said100) {
+            speak("Камера 100");
+            said100 = true;
+          }
+          
+          activeCamera = closestCam;
+        } else {
+          // Камери немає в радіусі дії — ховаємо інтерфейс і скидаємо тригери голосу
+          if (radarUi) radarUi.style.display = "none";
+          activeCamera = null;
+          said200 = false;
+          said100 = false;
+        }
+      },
+      (err) => lg(`GPS Error: ${err.message}`),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+    );
+  }
+}
+
+// ОНОВЛЕННЯ ДАНИХ ТА ТРИВОГИ НА ЕКРАНІ
+function updateUI() {
+  const ws = getActiveWs();
+  if (!ws) return;
+  
+  ws.lay.forEach(key => {
+    const el = document.getElementById(`v-${key}`);
+    if (!el) return;
+    
+    let val = V[key];
+    if (val === undefined || val === null) {
+      el.innerText = "--";
+      return;
+    }
+    
+    if (key === "Volt" || key === "Inj_Rate") {
+      el.innerText = val.toFixed(1);
+    } else {
+      el.innerText = val;
+    }
+  });
+}
+
+function checkAlarms() {
+  const ws = getActiveWs();
+  if (!ws) return;
+  
+  ws.lay.forEach(key => {
+    const tiles = document.querySelectorAll(`.tile[data-key="${key}"]`);
+    tiles.forEach(tile => {
+      let isAlarm = false;
+      if (key === "T_Eng" && V.T_Eng >= AL.T_Eng && bConn) isAlarm = true;
+      if (key === "Volt" && V.Volt > 2.0 && V.Volt <= AL.Volt && bConn) isAlarm = true;
+      
+      if (isAlarm) tile.classList.add("alarm-active");
+      else tile.classList.remove("alarm-active");
+    });
+  });
+}
+
+// AUTOMATIC PIP MODE (VISIBILITYCHANGE)
+function setupPiP() {
+  const v = document.getElementById("pip-video");
+  document.addEventListener("visibilitychange", () => {
+    const isEdit = document.getElementById("chk-edit").checked;
+    if (document.hidden) {
+      if (bConn && !isEdit) {
+        togglePipMode(true);
+      }
+    } else {
+      togglePipMode(false);
+    }
+  });
+}
+
+function togglePipMode(forceOn) {
+  const v = document.getElementById("pip-video");
+  if (!v || typeof v.webkitSetPresentationMode !== 'function') return;
+  
+  if (forceOn && v.webkitPresentationMode !== 'picture-in-picture') {
+    if (!window.pipCanvas) {
+      window.pipCanvas = document.createElement("canvas");
+      window.pipCanvas.width = 300;
+      window.pipCanvas.height = 150;
+      window.pipCtx = window.pipCanvas.getContext("2d");
+      window.pipStream = window.pipCanvas.captureStream(10);
+      v.srcObject = window.pipStream;
+    }
+    
+    if (!window.pipRenderInterval) {
+      window.pipRenderInterval = setInterval(() => {
+        const ctx = window.pipCtx;
+        ctx.fillStyle = "#161b22";
+        ctx.fillRect(0, 0, 300, 150);
+        ctx.fillStyle = "#8b949e";
+        ctx.font = "bold 20px sans-serif";
+        ctx.fillText("T_ENG", 20, 40);
+        ctx.fillStyle = "#f0f6fc";
+        ctx.font = "bold 56px sans-serif";
+        ctx.fillText(`${V.T_Eng}°C`, 20, 100);
+        ctx.fillStyle = "#58a6ff";
+        ctx.font = "bold 24px sans-serif";
+        ctx.fillText(`${V.RPM} rpm`, 20, 135);
+      }, 200);
+    }
+    v.webkitSetPresentationMode('picture-in-picture');
+  } else if (!forceOn && v.webkitPresentationMode === 'picture-in-picture') {
+    v.webkitSetPresentationMode('inline');
+    if (window.pipRenderInterval) {
+      clearInterval(window.pipRenderInterval);
+      window.pipRenderInterval = null;
+    }
+  }
+}
+
+// ==========================================
+// СУВОРЕ БЛОК BLE З'ЄДНАННЯ (БЕЗ ЗМІН)
+// ==========================================
+function setupBleUI() {
+  window.addEventListener('beforeunload', () => { if(bDev) bDev.gatt.disconnect(); });
+}
+
+function onConnectClick() {
+  if (clickTimer) {
+    clearTimeout(clickTimer);
+    clickTimer = null;
+    onConnectLongPress();
+  } else {
+    clickTimer = setTimeout(() => {
+      clickTimer = null;
+      onConnectShortTap();
+    }, 250);
+  }
+}
+
+function onConnectShortTap() {
+  lg("Short Tap on Connect");
+  if (isConnecting) {
+    lg("Forcing immediate reconnect from timer");
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    doConnectLoop();
+    return;
+  }
+  if (bConn) {
+    lg("Reconnecting active device...");
+    if (bDev) bDev.gatt.disconnect();
+    return;
+  }
+  connectDevice(false);
+}
+
+function onConnectLongPress() {
+  lg("Long Press on Connect -> FULL DISCONNECT");
+  if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(50);
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  isConnecting = false;
+  if (bDev) {
+    bDev.gatt.disconnect();
+    bDev = null;
+  }
+  setConnState("disconnected");
+}
+
+function setConnState(st) {
+  const btn = document.getElementById("btn-conn");
+  if (st === "connected") {
+    bConn = true; isConnecting = false;
+    btn.innerText = "DISCONNECT"; btn.className = "connected";
+  } else if (st === "connecting") {
+    bConn = false; isConnecting = true;
+    btn.innerText = "CONNECTING..."; btn.className = "connecting";
+  } else {
+    bConn = false; isConnecting = false;
+    btn.innerText = "CONNECT"; btn.className = "";
+    V.RPM = 0; V.Volt = 0; V.T_Eng = 0; V.MAP = 0; V.T_Air = 0; V.TPS = 0; V.Inj_Rate = 0;
+  }
+}
+
+async function withTimeout(promise, ms) {
+  let tId;
+  const timeout = new Promise((_, reject) => { tId = setTimeout(() => reject(new Error("Timeout")), ms); });
+  return Promise.race([promise, timeout]).then(res => { clearTimeout(tId); return res; });
+}
+
+async function connectDevice(isAuto) {
+  if (isConnecting && !isAuto) return;
+  setConnState("connecting");
+  
+  if (!bDev && !isAuto) {
+    try {
+      bDev = await navigator.bluetooth.requestDevice({
+        filters: [{ namePrefix: "bLink" }],
+        optionalServices: [SERVICE_UUID]
+      });
+      bDev.addEventListener('gattserverdisconnected', onDisconnected);
+    } catch(e) {
+      lg("Device pick canceled: " + e);
+      setConnState("disconnected");
+      return;
+    }
+  }
+  doConnectLoop();
+}
+
+async function doConnectLoop() {
+  if (!bDev) { setConnState("disconnected"); return; }
+  
+  while (isConnecting && !bConn) {
+    try {
+      lg("GATT connection attempt...");
+      const server = await withTimeout(bDev.gatt.connect(), 8000);
+      lg("GATT Connected! Discovering service...");
+      const service = await server.getPrimaryService(SERVICE_UUID);
+      bChar = await service.getCharacteristic(CHAR_UUID);
+      
+      await bChar.startNotifications();
+      bChar.addEventListener('characteristicvaluechanged', handleBleData);
+      
+      lg("Init ECU Protocol sequence...");
+      await sendEcuInit();
+      
+      setConnState("connected");
+      showToast("ECU ПІДКЛЮЧЕНО!");
+      break;
+    } catch(e) {
+      lg(`Connect failed error: ${e.message}. Retrying in 4s...`);
+      if (isConnecting) {
+        await new Promise(r => { reconnectTimer = setTimeout(r, 4000); });
+      }
+    }
+  }
+}
+
+function onDisconnected() {
+  lg("GATT Server Disconnected callback!");
+  setConnState("disconnected");
+  if (bDev) {
+    setConnState("connecting");
+    connectDevice(true);
+  }
+}
+
+async function sendEcuInit() {
+  const delay = ms => new Promise(r => setTimeout(r, ms));
+  const write = b => bChar.writeValue(new Uint8Array(b));
+  
+  await write([0x41,0x54,0x53,0x45,0x43,0x55,0x0d]); await delay(103);
+  for(let i=0; i<4; i++) { await write([0xfc,0x05,0x12,0x00,0xee]); await delay(13); }
+  await write([0x00,0x00,0x00]); await delay(115);
+  await write([0xfc,0x05,0x36,0x00,0xca]); await delay(75);
+  await write([0xfc,0x05,0x50,0x00,0xb0]); await delay(3800);
+  
+  const sub = [
+    0xfc,0x7f,0x14,0x00,0x01,0x01,0x04,0x01,0x05,0x01,0x06,0x01,0x0b,0x01,0x00,0x01,
+    0xff,0x11,0x01,0x01,0x04,0x01,0x05,0x01,0x06,0x01,0x0b,0x01,0x00,0x01,0xff,0xff,
+    0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
+    0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
+    0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
+    0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
+    0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
+    0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0x3d,0x01
+  ];
+  for (let i=0; i<sub.length; i+=20) {
+    await write(sub.slice(i, i+20));
+    await delay(3);
+  }
+  lg("ECU Subscribe successful.");
+}
+
+function handleBleData(e) {
+  const buf = new Uint8Array(e.target.value.buffer);
+  if (buf.length === 20) {
+    if (buf[0] === 0xfc) return; // Ігноруємо службовий пакет
+    parse20Byte(buf);
+  } else if (buf.length === 19) {
+    parse19Byte(buf);
+  }
+}
+
+function parse20Byte(pkt) {
+  V.RPM = (pkt[2] << 8) | pkt[3];
+  V.Volt = pkt[5] / 10;
+  V.T_Eng = pkt[6] - 28;
+  V.MAP = pkt[11];
+  V.T_Air = pkt[0] - 28;
+  
+  const rawTps = pkt[4];
+  window.lastRawTps = rawTps;
+  if (TC.max > TC.min) {
+    let tpsPct = ((rawTps - TC.min) / (TC.max - TC.min)) * 100;
+    if (tpsPct < 0) tpsPct = 0;
+    if (tpsPct > 100) tpsPct = 100;
+    V.TPS = Math.round(tpsPct);
+  } else {
+    V.TPS = 0;
+  }
+}
+
+function parse19Byte(pkt19) {
+  const rawInj = pkt19[7];
+  V.Inj_Rate = rawInj * 0.39 + 0.40;
+}
+</script>
+</body>
+</html>
